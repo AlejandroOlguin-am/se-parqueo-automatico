@@ -138,8 +138,8 @@ void main() {
    }
 
    // Env�o inicial
-   //delay_ms(200);
-   //send_sensor_packet(sensors);
+   delay_ms(200);
+   send_sensor_packet(sensors);
 
    while(TRUE) {
       process_incoming_serial();
