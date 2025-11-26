@@ -71,29 +71,37 @@ void applyLogic(int index) {
 
 // Función para parsear y actualizar el estado desde el PIC (Vía Serial/BT simulado)
 void parseAndApplySerialData(String data) {
-  // Esperamos tramas como: S:L,O,L,L
-  if (data.startsWith("S:")) {
-    String payload = data.substring(2); // Elimina "S:"
-    int startIndex = 0;
-    
-    for (int i = 0; i < 4; i++) {
-      int endIndex = payload.indexOf(',', startIndex);
-      String statusStr = (endIndex == -1) ? payload.substring(startIndex) : payload.substring(startIndex, endIndex);
+  // Trama esperada del PIC: "SENS:0101" (0=Libre 'L', 1=Ocupado 'O')
+  if (data.startsWith("SENS:")) {
+    // 1. Extraer solo los datos (0101)
+    String payload = data.substring(5); 
+
+    // 2. Verificar longitud mínima (4 plazas)
+    if (payload.length() < NUM_SPACES) {
+      Serial.println("Error: Trama de sensores incompleta.");
+      return;
+    }
+
+    // 3. Iterar sobre las 4 plazas (0 a 3)
+    for (int i = 0; i < NUM_SPACES; i++) {
+      char sensorValue = payload.charAt(i);
+      char new_estado_fisico = ' ';
       
-      char statusChar = statusStr.charAt(0);
-      
-      if (statusChar == 'L' || statusChar == 'O') {
-        plazas[i].estado_fisico = statusChar;
-        applyLogic(i);
-        //Serial.printf("Plaza %d actualizada a físico: %c\n", i + 1, statusChar);
+      // Convertir '0'/'1' a 'L'/'O'
+      if (sensorValue == '1') {
+        new_estado_fisico = 'O'; // Ocupado
+      } else if (sensorValue == '0') {
+        new_estado_fisico = 'L'; // Libre
       }
-      
-      if (endIndex == -1) break;
-      startIndex = endIndex + 1;
+
+      // Aplicar solo si el valor es válido y diferente para evitar procesamiento excesivo
+      if (new_estado_fisico != ' ' && plazas[i].estado_fisico != new_estado_fisico) {
+        plazas[i].estado_fisico = new_estado_fisico;
+        applyLogic(i); // Recalcula el estado final de la web
+      }
     }
   } else {
-    // Aquí se podrían implementar los comandos de LED y Servo si vinieran del PIC
-    // Pero en este diseño, esos comandos (R y D) van del ESP32 al PIC.
+    // Aquí irían otros comandos si el PIC los enviara (ej: ACK)
     Serial.print("Trama Serial no reconocida: ");
     Serial.println(data);
   }
