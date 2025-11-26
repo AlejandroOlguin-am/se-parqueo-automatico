@@ -15,6 +15,9 @@ const char* password = "Pizza12345*";
 BluetoothSerial SerialBT;
 bool bt_client_connected = false; 
 
+// Número de plazas de parqueo
+const int NUM_SPACES = 4;
+
 // Crear servidor en puerto 80
 WebServer server(80);
 
@@ -71,37 +74,32 @@ void applyLogic(int index) {
 
 // Función para parsear y actualizar el estado desde el PIC (Vía Serial/BT simulado)
 void parseAndApplySerialData(String data) {
-  // Trama esperada del PIC: "SENS:0101" (0=Libre 'L', 1=Ocupado 'O')
-  if (data.startsWith("SENS:")) {
-    // 1. Extraer solo los datos (0101)
-    String payload = data.substring(5); 
+  // Trama esperada del PIC: "S:L,O,L,L" (L=Libre, O=Ocupado)
+  const int NUM_SPACES = 4;
 
-    // 2. Verificar longitud mínima (4 plazas)
-    if (payload.length() < NUM_SPACES) {
-      Serial.println("Error: Trama de sensores incompleta.");
-      return;
-    }
-
-    // 3. Iterar sobre las 4 plazas (0 a 3)
+  if (data.startsWith("S:")) {
+    String payload = data.substring(2); // Elimina "S:"
+    int startIndex = 0;
+    
     for (int i = 0; i < NUM_SPACES; i++) {
-      char sensorValue = payload.charAt(i);
-      char new_estado_fisico = ' ';
+      int endIndex = payload.indexOf(',', startIndex);
+      // Extrae la letra del estado (L u O)
+      String statusStr = (endIndex == -1) ? payload.substring(startIndex) : payload.substring(startIndex, endIndex);
       
-      // Convertir '0'/'1' a 'L'/'O'
-      if (sensorValue == '1') {
-        new_estado_fisico = 'O'; // Ocupado
-      } else if (sensorValue == '0') {
-        new_estado_fisico = 'L'; // Libre
+      char statusChar = statusStr.charAt(0);
+      
+      // La lógica ahora acepta 'L' y 'O' directamente
+      if (statusChar == 'L' || statusChar == 'O') {
+        plazas[i].estado_fisico = statusChar;
+        applyLogic(i);
+        //Serial.printf("Plaza %d actualizada a físico: %c\n", i + 1, statusChar);
       }
-
-      // Aplicar solo si el valor es válido y diferente para evitar procesamiento excesivo
-      if (new_estado_fisico != ' ' && plazas[i].estado_fisico != new_estado_fisico) {
-        plazas[i].estado_fisico = new_estado_fisico;
-        applyLogic(i); // Recalcula el estado final de la web
-      }
+      
+      if (endIndex == -1) break;
+      startIndex = endIndex + 1;
     }
   } else {
-    // Aquí irían otros comandos si el PIC los enviara (ej: ACK)
+    // Si no empieza con S:, ahora detectará la trama "#,0,0,0,0;" como no reconocida.
     Serial.print("Trama Serial no reconocida: ");
     Serial.println(data);
   }
@@ -169,23 +167,23 @@ void handleReserve() {
   else if (plazaId == "P3") plazaIndex = 2;
   else if (plazaId == "P4") plazaIndex = 3;
 
-  if (plazaIndex != -1) {
-    String command = "";
-
-    if (action == "R" && plazas[plazaIndex].estado_final == 'L') {
-      plazas[plazaIndex].estado_reserva = 'R';
-      command = "R:" + plazaId + ",R\n"; // Comando: RESERVA:P1,R
-      server.send(200, "application/json", "{\"success\": true, \"message\": \"Plaza " + plazaId + " reservada!\"}");
-    } else if (action == "C" && plazas[plazaIndex].estado_final == 'R') {
-      plazas[plazaIndex].estado_reserva = 'N';
-      command = "R:" + plazaId + ",C\n"; // Comando: RESERVA:P1,C
-      server.send(200, "application/json", "{\"success\": true, \"message\": \"Reserva de Plaza " + plazaId + " cancelada.\"}");
-    } else {
-        server.send(400, "application/json", "{\"success\": false, \"message\": \"No se puede realizar la acción. Estado actual: " + String(plazas[plazaIndex].estado_final) + "\"}");
-        return;
+// 1. Aplicar la lógica de reserva/cancelación (R o C)
+if (plazaIndex != -1) {    
+    // ----------------------------------------------------------
+    // GENERACIÓN DEL COMANDO R:X,X,X,X PARA EL PIC
+    // ----------------------------------------------------------
+    String command = "R:"; // Prefijo de Control R:
+    
+    // El ESP32 envía el estado FINAL de la web para que el PIC solo lo replique.
+    for (int i = 0; i < NUM_SPACES; i++) {
+        // Enviar el estado final (L, O, R, M)
+        command += String(plazas[i].estado_final); 
+        if (i < NUM_SPACES - 1) {
+            command += ","; // Separador de coma
+        }
     }
-
-    applyLogic(plazaIndex);
+    
+    command += "\n"; // Fin de línea
 
     // ** PUNTO CLAVE: ENVÍO VÍA BLUETOOTH **
     if (SerialBT.hasClient()) {
@@ -195,9 +193,12 @@ void handleReserve() {
     } else {
         Serial.println("Advertencia: No se envió comando BT, cliente desconectado.");
     }
-
+    // ----------------------------------------------------------
+    
+    // ... (restablecer la respuesta JSON al cliente web) ...
     return;
-  }
+}
+// ...
 
   server.send(400, "application/json", "{\"success\": false, \"message\": \"ID de Plaza o Acción Inválida.\"}");
 }

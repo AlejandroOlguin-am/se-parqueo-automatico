@@ -1,4 +1,4 @@
-/* PIC16F877A - Sistema parking (envía sensores y recibe comandos LED)
+/* PIC16F877A - Sistema parking (envï¿½a sensores y recibe comandos LED)
    CCS C - 4 MHz
    Sensores: RA0..RA3
    LEDs:     RB0..RB7, RD0..RD7 (4 espacios x 4 leds cada uno)
@@ -35,42 +35,55 @@ void set_space_led(int8 space, int8 state) {
 }
 
 void send_sensor_packet(int8 sensors[]) {
-   // Formato: SENS:0101\r\n  (1=ocupado,0=libre)
+   // Nuevo Formato: S:L,O,L,L\n  (L=Libre, O=Ocupado)
    int8 i;
-   putchar('S'); putchar('E'); putchar('N'); putchar('S'); putchar(':');
-   for (i = 0; i < NUM_SPACES; i++) {
-      putchar( sensors[i] ? '1' : '0' );
-   }
-   // CR LF
-   putchar('\r'); putchar('\n');
-}
+   putchar('S'); putchar(':'); // Prefijo S:
 
+   for (i = 0; i < NUM_SPACES; i++) {
+      // Si el sensor es '1' (Ocupado) envÃ­a 'O', si es '0' (Libre) envÃ­a 'L'
+      putchar( sensors[i] ? 'O' : 'L' ); 
+      if (i < NUM_SPACES - 1) {
+         putchar(','); // Separador de coma
+      }
+   }
+   // Nuevo fin de lÃ­nea: solo \n (El ESP32 lo gestiona mejor)
+   putchar('\n'); 
+   // Opcional: Quitar el delay_ms(200) y send_sensor_packet(sensors) del main() para empezar mÃ¡s rÃ¡pido
+}
 #define RXBUF_LEN 32
 char rxbuf[RXBUF_LEN];
 int rxidx = 0;
 
-// parsea una línea completa en rxbuf
+// parsea una lï¿½nea completa en rxbuf
 void parse_rx_line(char *line) {
-   // Espera: "LEDS:x,x,x,x"  con x en [0..3]
-   int8 vals[NUM_SPACES];
+   // Espera: R:L,R,O,M
+   int8 vals[NUM_SPACES]; // AquÃ­ almacenaremos los cÃ³digos 0, 1, 2, 3
    int8 i = 0;
    char *p = line;
 
-   // Verificar prefijo "LEDS:"
-   if (!(p[0]=='L' && p[1]=='E' && p[2]=='D' && p[3]=='S' && p[4]==':')) return;
-   p += 5;
+   // Verificar prefijo "R:" (Comando de Reserva/Control)
+   if (!(p[0]=='R' && p[1]==':')) return; 
+   p += 2; // Avanzar despuÃ©s de R:
 
    while (*p && i < NUM_SPACES) {
       // Saltar espacios y tabs
       while (*p == ' ' || *p == '\t') p++;
-      if (*p >= '0' && *p <= '3') {
-         vals[i] = *p - '0';
+
+      int8 led_code = -1;
+
+      if (*p == 'L') led_code = 0; // Libre -> Green
+      else if (*p == 'O') led_code = 1; // Ocupado -> Red
+      else if (*p == 'R') led_code = 2; // Reservado -> Blue
+      else if (*p == 'M') led_code = 3; // Mantenimiento -> Yellow
+
+      if (led_code != -1) {
+         vals[i] = led_code;
          i++;
-         p++;
-      } else {
-         // avanzar hasta coma o fin
-         while (*p && *p != ',') p++;
       }
+
+      // Avanzar hasta la coma o fin
+      p++;
+      while (*p && *p != ',') p++;
       if (*p == ',') p++;
    }
 
@@ -79,10 +92,6 @@ void parse_rx_line(char *line) {
       for (i = 0; i < NUM_SPACES; i++) {
          set_space_led(i, vals[i]);
       }
-      // Opcional: enviar ack
-      putchar('A'); putchar('C'); putchar('K'); putchar(':');
-      putchar('L'); putchar('E'); putchar('D'); putchar('S');
-      putchar('\r'); putchar('\n');
    }
 }
 
@@ -128,19 +137,19 @@ void main() {
       prev_sensors[i] = sensors[i];
    }
 
-   // Envío inicial
-   delay_ms(200);
-   send_sensor_packet(sensors);
+   // Envï¿½o inicial
+   //delay_ms(200);
+   //send_sensor_packet(sensors);
 
    while(TRUE) {
       process_incoming_serial();
 
-      // Leer sensores periódicamente
+      // Leer sensores periï¿½dicamente
       for (i = 0; i < NUM_SPACES; i++) {
          sensors[i] = input(sensorPins[i]) ? 1 : 0;
       }
 
-      // Si cambió algún sensor, notificar inmediatamente
+      // Si cambiï¿½ algï¿½n sensor, notificar inmediatamente
       int8 changed = 0;
       for (i = 0; i < NUM_SPACES; i++) {
          if (sensors[i] != prev_sensors[i]) { changed = 1; break; }
@@ -150,7 +159,7 @@ void main() {
          for (i = 0; i < NUM_SPACES; i++) prev_sensors[i] = sensors[i];
       }
 
-      // Envío periódico cada ~2000 ms
+      // Envï¿½o periï¿½dico cada ~2000 ms
       tickCounter++;
       if (tickCounter >= 40) {  // ~40 * 50ms = 2000ms
          send_sensor_packet(sensors);
