@@ -169,8 +169,23 @@ void handleReserve() {
 
 // 1. Aplicar la lógica de reserva/cancelación (R o C)
 if (plazaIndex != -1) {    
-    // ----------------------------------------------------------
-    // GENERACIÓN DEL COMANDO R:X,X,X,X PARA EL PIC
+
+    // 1. ACTUALIZAR EL ESTADO DE RESERVA LOCAL
+
+    if (action == "R") {
+      // Reservar
+      plazas[plazaIndex].estado_reserva = 'R';
+      Serial.printf("Plaza %s RESERVADA localmente\n", plazaId.c_str());
+    } 
+    else if (action == "C") {
+      // Cancelar
+      plazas[plazaIndex].estado_reserva = 'N';
+      Serial.printf("Plaza %s CANCELADA localmente\n", plazaId.c_str());
+    }
+    
+    // Aplicar la lógica para actualizar estado_final
+    applyLogic(plazaIndex);
+    
     // ----------------------------------------------------------
     String command = "R:"; // Prefijo de Control R:
     
@@ -192,6 +207,7 @@ if (plazaIndex != -1) {
         Serial.print(command);
     } else {
         Serial.println("Advertencia: No se envió comando BT, cliente desconectado.");
+        Serial.println("Comando que se intentó enviar: " + command);
     }
     // ----------------------------------------------------------
     

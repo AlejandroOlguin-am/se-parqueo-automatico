@@ -1,23 +1,27 @@
-/* PIC16F877A - Sistema parking (env�a sensores y recibe comandos LED)
+/* PIC16F877A - Sistema Parking Unificado
    CCS C - 4 MHz
    Sensores: RA0..RA3
    LEDs:     RB0..RB7, RD0..RD7 (4 espacios x 4 leds cada uno)
+   Servo (barrera central): PIN_C0
    UART: baud 9600 (HC-05)
 */
 
+/* FUSES y configuración */
 #include <16F877A.h>
 #fuses XT, NOWDT, NOLVP, NOBROWNOUT
 #use delay(clock=4000000)
 
-// UART hacia HC-05
+/* UART hacia HC-05 */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1)
 
-#define NUM_SPACES 4
+/* Constantes */
+const int8 NUM_SPACES = 4;
+#define SERVO_ENTRY_PIN PIN_C0
 
-// Pines sensores
+/* Pines sensores */
 const int8 sensorPins[NUM_SPACES] = { PIN_A0, PIN_A1, PIN_A2, PIN_A3 };
 
-// Mapeo LEDs [space][color]  color: 0=Green,1=Red,2=Blue,3=Yellow
+/* Mapeo LEDs [space][color]  color: 0=Green(L),1=Red(O),2=Blue(R),3=Yellow(M) */
 const int8 ledPins[NUM_SPACES][4] = {
    { PIN_B0, PIN_B1, PIN_B2, PIN_B3 },  // space 0
    { PIN_B4, PIN_B5, PIN_B6, PIN_B7 },  // space 1
@@ -25,8 +29,30 @@ const int8 ledPins[NUM_SPACES][4] = {
    { PIN_D4, PIN_D5, PIN_D6, PIN_D7 }   // space 3
 };
 
+/* Buffers RX */
+#define RXBUF_LEN  48
+char rxbuf[RXBUF_LEN];
+int rxidx = 0;
+
+/* Estados locales */
+char physical[NUM_SPACES]; // 'L' o 'O' (según sensor)
+char final[NUM_SPACES];    // 'L','O','R','M' <-- decidido por ESP (recibido)
+char prev_physical[NUM_SPACES]; // para detectar cambios
+
+/* Prototipos */
+void set_space_led(int8 space, int8 state);
+void set_barrier_open();   // abrir (1)
+void set_barrier_close();  // cerrar (0)
+char read_sensor_stable(int8 pin);
+void enviar_estados_sensores(void);
+void parse_rx_line(char *line);
+void process_incoming_serial(void);
+
+/* Implementaciones */
+
+/* Enciende un LED (solo uno) por plaza según state:
+   state: 0=Green(L), 1=Red(O), 2=Blue(R), 3=Yellow(M)  */
 void set_space_led(int8 space, int8 state) {
-   // state: 0=Green,1=Red,2=Blue,3=Yellow
    int8 i;
    for (i = 0; i < 4; i++) {
       if (i == state) output_high( ledPins[space][i] );
@@ -34,139 +60,184 @@ void set_space_led(int8 space, int8 state) {
    }
 }
 
-void send_sensor_packet(int8 sensors[]) {
-   // Nuevo Formato: S:L,O,L,L\n  (L=Libre, O=Ocupado)
-   int8 i;
-   putchar('S'); putchar(':'); // Prefijo S:
-
-   for (i = 0; i < NUM_SPACES; i++) {
-      // Si el sensor es '1' (Ocupado) envía 'O', si es '0' (Libre) envía 'L'
-      putchar( sensors[i] ? 'O' : 'L' ); 
-      if (i < NUM_SPACES - 1) {
-         putchar(','); // Separador de coma
-      }
-   }
-   // Nuevo fin de línea: solo \n (El ESP32 lo gestiona mejor)
-   putchar('\n'); 
-   // Opcional: Quitar el delay_ms(200) y send_sensor_packet(sensors) del main() para empezar más rápido
+/* Barrera: simplificada (usa pulso); notar que servo ideal requiere PWM continuo.
+   CERRAR = lower position (por ejemplo 0°), ABRIR = raised (90°) */
+void set_barrier_close() {
+    // Pulsos cortos; en la práctica usar PWM por timer para mantener posición estable
+    // Aquí enviamos varios pulsos rápidos para intentar fijar la posición
+    int k;
+    for (k=0; k<25; k++) {           // ~25 pulsos => aproximación a 20-50Hz por bloque
+        output_high(SERVO_ENTRY_PIN);
+        delay_us(600);               // ~0.6 ms -> cerca de 0°
+        output_low(SERVO_ENTRY_PIN);
+        delay_ms(20);                // período ~20ms
+    }
 }
-#define RXBUF_LEN 32
-char rxbuf[RXBUF_LEN];
-int rxidx = 0;
 
-// parsea una l�nea completa en rxbuf
+void set_barrier_open() {
+    int k;
+    for (k=0; k<25; k++) {
+        output_high(SERVO_ENTRY_PIN);
+        delay_us(1500);              // ~1.5 ms -> aproximación a 90°
+        output_low(SERVO_ENTRY_PIN);
+        delay_ms(20);
+    }
+}
+
+/* Debounce simple: lee 3 veces con 20ms y devuelve el valor mayoritario
+   Retorna 'L' si 0 (LOW) o 'O' si 1 (HIGH) */
+char read_sensor_stable(int8 pin) {
+    int v1, v2, v3;
+    v1 = input(pin);
+    delay_ms(20);
+    v2 = input(pin);
+    delay_ms(20);
+    v3 = input(pin);
+    int sum = v1 + v2 + v3;
+    if (sum >= 2) return 'O'; // ocupado
+    return 'L'; // libre
+}
+
+/* Enviar estado FÍSICO (S:L,O,L,L\n) por UART — mantiene el formato que ya tenías */
+void enviar_estados_sensores() {
+   // Formato: S:L,O,L,L\n
+   putchar('S'); putchar(':');
+   int i;
+   for (i = 0; i < NUM_SPACES; i++) {
+      putchar( physical[i] );
+      if (i < NUM_SPACES - 1) putchar(',');
+   }
+   putchar('\n');
+}
+
+/* Procesa una línea recibida por UART.
+   Espera tramas del tipo R:L,O,R,L  (sin el \n) */
 void parse_rx_line(char *line) {
-   // Espera: R:L,R,O,M
-   int8 vals[NUM_SPACES]; // Aquí almacenaremos los códigos 0, 1, 2, 3
-   int8 i = 0;
    char *p = line;
+   int i = 0;
+   int8 led_code;
 
-   // Verificar prefijo "R:" (Comando de Reserva/Control)
-   if (!(p[0]=='R' && p[1]==':')) return; 
-   p += 2; // Avanzar después de R:
+   // Validar prefijo R:
+   if (!(p[0]=='R' && p[1]==':')) return;
+   p += 2;
 
+   // Parsear hasta 4 estados separados por coma
    while (*p && i < NUM_SPACES) {
-      // Saltar espacios y tabs
+      // saltar espacios
       while (*p == ' ' || *p == '\t') p++;
-
-      int8 led_code = -1;
-
-      if (*p == 'L') led_code = 0; // Libre -> Green
-      else if (*p == 'O') led_code = 1; // Ocupado -> Red
-      else if (*p == 'R') led_code = 2; // Reservado -> Blue
-      else if (*p == 'M') led_code = 3; // Mantenimiento -> Yellow
-
-      if (led_code != -1) {
-         vals[i] = led_code;
+      char c = *p;
+      if (c == 'L' || c == 'O' || c == 'R' || c == 'M') {
+         final[i] = c; // actualizar estado final de la plaza i
+         // Actualizar LED inmediatamente según final:
+         switch (c) {
+            case 'L': led_code = 0; break; // Verde
+            case 'O': led_code = 1; break; // Rojo
+            case 'R': led_code = 2; break; // Azul
+            case 'M': led_code = 3; break; // Amarillo
+            default: led_code = 0; break;
+         }
+         set_space_led(i, led_code);
          i++;
       }
-
-      // Avanzar hasta la coma o fin
-      p++;
+      // avanzar hasta próximo separador o fin
       while (*p && *p != ',') p++;
       if (*p == ',') p++;
    }
 
-   if (i == NUM_SPACES) {
-      // Aplicar estados
-      for (i = 0; i < NUM_SPACES; i++) {
-         set_space_led(i, vals[i]);
+   // Una vez parseado, evaluar la barrera central:
+   {
+      int any_reserved = 0;
+      int j;
+      for (j = 0; j < NUM_SPACES; j++) {
+         if (final[j] == 'R') { any_reserved = 1; break; }
+      }
+      if (any_reserved) {
+         // cerrar barrera (hay al menos una reserva)
+         set_barrier_close();
+      } else {
+         // abrir barrera (ninguna reserva)
+         set_barrier_open();
       }
    }
+
+   // Opcional: enviar ACK de recepción para debug (descomentar si lo quieres)
+   // printf("ACK:R,OK\n");
 }
 
+/* Lee serial no bloqueante y arma líneas hasta '\n' */
 void process_incoming_serial() {
-   // Lectura no bloqueante del UART (CCS: kbhit() y getch())
    char c;
    while (kbhit()) {
-      c = getch(); // lee un byte
-      // Normalizar fin de linea
+      c = getch();
       if (c == '\r') continue;
       if (c == '\n') {
-         rxbuf[rxidx] = '\0';
-         if (rxidx > 0) parse_rx_line(rxbuf);
+         if (rxidx > 0) {
+             rxbuf[rxidx] = '\0';
+             parse_rx_line(rxbuf);
+         }
          rxidx = 0;
       } else {
-         if (rxidx < RXBUF_LEN-1) {
+         if (rxidx < RXBUF_LEN - 1) {
             rxbuf[rxidx++] = c;
          } else {
-            // overflow => reset buffer
+            // overflow -> resetear buffer
             rxidx = 0;
          }
       }
    }
 }
 
+/* MAIN */
 void main() {
-   int8 sensors[NUM_SPACES];
-   int8 prev_sensors[NUM_SPACES];
    int i;
-   unsigned int tickCounter = 0; // cada tick ~50 ms -> 40 ticks = 2000 ms
+   unsigned int tickCounter = 0; // pacing para envío periódico
+   int8 changed;
 
-   // Config puerto
-   set_tris_b(0x00); // PORTB output (LEDs)
-   set_tris_d(0x00); // PORTD output (LEDs)
-   set_tris_a(0x0F); // RA0..RA3 inputs (sensores), otros como output
+   /* Configuración de puertos */
+   set_tris_b(0x00); // PORTB outputs (LEDs)
+   set_tris_d(0x00); // PORTD outputs (LEDs)
+   set_tris_a(0x0F); // RA0..RA3 inputs (sensores)
+   set_tris_c(0x00); // PORTC outputs (servo y UART TX/RX)
 
-   // Inicializar leds (por defecto Green)
-   for (i = 0; i < NUM_SPACES; i++) set_space_led(i, 0);
-
-   // Leer inicial sensores
+   /* Inicializar LEDs y arrays */
    for (i = 0; i < NUM_SPACES; i++) {
-      sensors[i] = input(sensorPins[i]) ? 1 : 0;
-      prev_sensors[i] = sensors[i];
+      final[i] = 'L';         // por defecto libre
+      physical[i] = read_sensor_stable(sensorPins[i]);
+      prev_physical[i] = physical[i];
+      set_space_led(i, 0);    // verde
    }
 
-   // Env�o inicial
-   delay_ms(200);
-   send_sensor_packet(sensors);
+   // Enviar estado inicial al ESP
+   enviar_estados_sensores();
 
+   /* Loop principal */
    while(TRUE) {
+      // 1) Procesar serial entrante (comandos R:)
       process_incoming_serial();
 
-      // Leer sensores peri�dicamente
+      // 2) Leer sensores con debounce
+      changed = 0;
       for (i = 0; i < NUM_SPACES; i++) {
-         sensors[i] = input(sensorPins[i]) ? 1 : 0;
+         char newp = read_sensor_stable(sensorPins[i]);
+         if (newp != physical[i]) {
+            physical[i] = newp;
+            changed = 1;
+         }
       }
 
-      // Si cambi� alg�n sensor, notificar inmediatamente
-      int8 changed = 0;
-      for (i = 0; i < NUM_SPACES; i++) {
-         if (sensors[i] != prev_sensors[i]) { changed = 1; break; }
-      }
+      // 3) Enviar si hubo cambio en sensores
       if (changed) {
-         send_sensor_packet(sensors);
-         for (i = 0; i < NUM_SPACES; i++) prev_sensors[i] = sensors[i];
+         enviar_estados_sensores();
+         for (i = 0; i < NUM_SPACES; i++) prev_physical[i] = physical[i];
       }
 
-      // Env�o peri�dico cada ~2000 ms
+      // 4) Envío periódico cada ~1000 ms (opcional, mantiene sincronía)
       tickCounter++;
-      if (tickCounter >= 40) {  // ~40 * 50ms = 2000ms
-         send_sensor_packet(sensors);
+      if (tickCounter >= 20) { // 20 * ~50ms = ~1000ms (el delay_ms al final define el tick)
+         enviar_estados_sensores();
          tickCounter = 0;
       }
 
-      delay_ms(50);
+      delay_ms(50); // pacing del loop
    }
 }
-
