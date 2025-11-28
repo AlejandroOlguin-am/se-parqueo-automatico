@@ -205,6 +205,7 @@ if (plazaIndex != -1) {
         SerialBT.print(command); 
         Serial.print("Comando BT enviado al PIC: ");
         Serial.print(command);
+        SerialBT.write(command.c_str(), command.lengh())
     } else {
         Serial.println("Advertencia: No se envió comando BT, cliente desconectado.");
         Serial.println("Comando que se intentó enviar: " + command);

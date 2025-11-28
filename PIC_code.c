@@ -161,12 +161,18 @@ void parse_rx_line(char *line) {
    }
 
    // Opcional: enviar ACK de recepción para debug (descomentar si lo quieres)
-   // printf("ACK:R,OK\n");
+   printf("ACK:R,OK\n");
 }
 
 /* Lee serial no bloqueante y arma líneas hasta '\n' */
 void process_incoming_serial() {
    char c;
+   if(kbhit()) {
+      datos = getch();
+      dato = getc();
+      printf("Recibido: %c\n", dato);
+      printf("Recibido: %c\n", datos);
+   }
    while (kbhit()) {
       c = getch();
       if (c == '\r') continue;
@@ -197,7 +203,7 @@ void main() {
    set_tris_b(0x00); // PORTB outputs (LEDs)
    set_tris_d(0x00); // PORTD outputs (LEDs)
    set_tris_a(0x0F); // RA0..RA3 inputs (sensores)
-   set_tris_c(0x00); // PORTC outputs (servo y UART TX/RX)
+   set_tris_c(0x80); // PORTC outputs (servo y UART TX/RX)
 
    /* Inicializar LEDs y arrays */
    for (i = 0; i < NUM_SPACES; i++) {
