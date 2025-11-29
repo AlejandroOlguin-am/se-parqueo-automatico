@@ -12,6 +12,9 @@
 //const char* password = "Pizza12345*";
 const char* ssid = "HUAWEI-2.4G-W8yg";
 const char* password = "PGbdC7X9";
+// --- Bluetooth Serial ---
+unsigned long last_pic_sync_time = 0;
+const long PIC_SYNC_INTERVAL = 8000; // 8 segundos
 
 // Objeto para manejar la comunicación Bluetooth
 BluetoothSerial SerialBT;
@@ -48,11 +51,32 @@ void applyLogic(int index);
 // ====================================================================
 // --- 2. LÓGICA DE GESTIÓN DE ESTADOS ---
 // ====================================================================
-
+// --- FUNCIÓN PARA ENVIAR EL ESTADO FINAL DE LAS PLAZAS AL PIC ---
+void send_control_to_pic() {
+    if (!SerialBT.hasClient()) {
+        Serial.println("Advertencia: No se envió comando BT, cliente desconectado.");
+        return;
+    }
+    
+    String command = "R:"; // Prefijo de Control R:
+    
+    // Construir la trama completa R:X,X,X,X
+    for (int i = 0; i < NUM_SPACES; i++) {
+        command += String(plazas[i].estado_final); 
+        if (i < NUM_SPACES - 1) {
+            command += ","; 
+        }
+    }
+    
+    SerialBT.println(command); 
+    Serial.println("Comando BT enviado al PIC: " + command);
+    SerialBT.flush();
+}
 // Función para determinar el estado final que se muestra en la web
 void applyLogic(int index) {
   char reserva = plazas[index].estado_reserva;
   char fisico = plazas[index].estado_fisico;
+  char prev_estado_final = plazas[index].estado_final; // Guardar estado anterior
   
   // 1. Prioridad: Mantenimiento
   if (reserva == 'M') {
@@ -71,6 +95,12 @@ void applyLogic(int index) {
   // 3. Estado Físico Normal
   else { // reserva == 'N'
     plazas[index].estado_final = fisico; // Libre ('L') u Ocupado ('O')
+  }
+  // **** SINCRONIZACIÓN CON EL PIC ****
+  if (plazas[index].estado_final != prev_estado_final) {
+      // Si el estado final lógico (que se muestra en la web) cambió, 
+      // debemos enviar el comando R: completo para que el PIC actualice su LED.
+      send_control_to_pic();
   }
 }
 
@@ -202,16 +232,8 @@ if (plazaIndex != -1) {
     
     //command += "\n"; // Fin de línea
 
-    // ** PUNTO CLAVE: ENVÍO VÍA BLUETOOTH **
-    if (SerialBT.hasClient()) {
-        SerialBT.println(command); 
-        SerialBT.flush();
-        Serial.println("Comando BT enviado al PIC: ");
-        Serial.println(command);
-    } else {
-        Serial.println("Advertencia: No se envió comando BT, cliente desconectado.");
-        Serial.println("Comando que se intentó enviar: " + command);
-    }
+    //** ENVÍO VÍA BLUETOOTH **
+    send_control_to_pic();
     // ----------------------------------------------------------
     
     // ... (restablecer la respuesta JSON al cliente web) ...
@@ -466,5 +488,17 @@ void loop() {
       Serial.print("IGNORED BT: ");
       Serial.println(data);
     }
+  }
+  // ----------------------------------------------------
+  // --- Tarea 3: Envío Periódico de Control (Heartbeat) ---
+  // ----------------------------------------------------
+  unsigned long currentMillis = millis();
+  
+  if (currentMillis - last_pic_sync_time >= PIC_SYNC_INTERVAL) {
+      if (SerialBT.hasClient()) {
+        send_control_to_pic(); // Re-enviar el estado lógico completo
+        Serial.println("Heartbeat R: enviado.");
+      }
+      last_pic_sync_time = currentMillis;
   }
 }

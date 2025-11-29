@@ -44,8 +44,6 @@ char prev_physical[NUM_SPACES];
 // Estado final recibido del ESP: L, O, R, M
 char final[NUM_SPACES] = {'L', 'L', 'L', 'L'}; 
 
-// Variables Servo
-int1 barrier_target = 1; // 1=Abierto, 0=Cerrado
 
 /* --- INTERRUPCIÓN RDA (Recepción Serial) --- */
 #int_rda
@@ -88,18 +86,6 @@ void enviar_estados_sensores() {
    printf("S:%c,%c,%c,%c\n", physical[0], physical[1], physical[2], physical[3]);
 }
 
-// Pulso del servo (No bloqueante)
-void servo_pulse_once() {
-   if (barrier_target) { // ABRIR (90 grados aprox)
-      output_high(SERVO_PIN);
-      delay_us(1500); 
-      output_low(SERVO_PIN);
-   } else { // CERRAR (0 grados aprox)
-      output_high(SERVO_PIN);
-      delay_us(600); 
-      output_low(SERVO_PIN);
-   }
-}
 // Genera pulsos para todos los servos
 void update_servos() {
     for (int8 i = 0; i < NUM_SERVOS; i++) {
@@ -146,9 +132,7 @@ void parse_rx_line(char *buffer) {
          if(c == 'R') { set_space_led(i, 2); hay_reserva = 1; } // Azul
          if(c == 'M') set_space_led(i, 3); // Amarillo
          
-         i++;
-      }
-      // Lógica de barrera individual
+         // Lógica de barrera individual
       if(c == 'R') { 
             barrier_target[i] = 0; // Cerrar barrera de la plaza i si se reservó (R)
         } 
@@ -156,6 +140,9 @@ void parse_rx_line(char *buffer) {
             barrier_target[i] = 1; // Abrir barrera de la plaza i si se liberó (L)
         }
 
+         i++;
+      }
+      
       p_idx++;
    }
 }
@@ -219,7 +206,6 @@ void main() {
       }
       
       // 5. CONTROL SERVO
-      //servo_pulse_once();
       update_servos();
       
       delay_ms(20);
