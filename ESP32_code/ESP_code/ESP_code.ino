@@ -202,10 +202,9 @@ if (plazaIndex != -1) {
 
     // ** PUNTO CLAVE: ENVÍO VÍA BLUETOOTH **
     if (SerialBT.hasClient()) {
-        SerialBT.print(command); 
-        Serial.print("Comando BT enviado al PIC: ");
-        Serial.print(command);
-        SerialBT.write(command.c_str(), command.lengh())
+        SerialBT.println(command); 
+        Serial.println("Comando BT enviado al PIC: ");
+        Serial.println(command);
     } else {
         Serial.println("Advertencia: No se envió comando BT, cliente desconectado.");
         Serial.println("Comando que se intentó enviar: " + command);

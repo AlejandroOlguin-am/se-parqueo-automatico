@@ -153,10 +153,10 @@ void parse_rx_line(char *line) {
       }
       if (any_reserved) {
          // cerrar barrera (hay al menos una reserva)
-         set_barrier_close();
+         //set_barrier_close();
       } else {
          // abrir barrera (ninguna reserva)
-         set_barrier_open();
+         //set_barrier_open();
       }
    }
 
@@ -167,12 +167,7 @@ void parse_rx_line(char *line) {
 /* Lee serial no bloqueante y arma líneas hasta '\n' */
 void process_incoming_serial() {
    char c;
-   if(kbhit()) {
-      datos = getch();
-      dato = getc();
-      printf("Recibido: %c\n", dato);
-      printf("Recibido: %c\n", datos);
-   }
+
    while (kbhit()) {
       c = getch();
       if (c == '\r') continue;
@@ -218,8 +213,6 @@ void main() {
 
    /* Loop principal */
    while(TRUE) {
-      // 1) Procesar serial entrante (comandos R:)
-      process_incoming_serial();
 
       // 2) Leer sensores con debounce
       changed = 0;
@@ -245,5 +238,8 @@ void main() {
       }
 
       delay_ms(50); // pacing del loop
+
+      // 1) Procesar serial entrante (comandos R:)
+      process_incoming_serial();
    }
 }

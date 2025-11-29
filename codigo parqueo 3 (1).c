@@ -26,7 +26,7 @@ void recibir_estados_sensores(int8 sensors[]) {
 void rda_isr(){
    char c;
    if (!kbhit()) return;          // por seguridad
-   c = getc();                    // lee un �nico byte
+   c = getch();                    // lee un �nico byte
 
    // Si estamos en overflow, descartamos hasta fin de l�nea
    if (rxidx >= RXBUF_LEN-1) {
