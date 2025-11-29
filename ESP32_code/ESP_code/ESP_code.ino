@@ -8,8 +8,10 @@
 // ====================================================================
 
 // --- Credenciales Wi-Fi ---
-const char* ssid = "O Creator's";
-const char* password = "Pizza12345*";
+//const char* ssid = "O Creator's";
+//const char* password = "Pizza12345*";
+const char* ssid = "HUAWEI-2.4G-W8yg";
+const char* password = "PGbdC7X9";
 
 // Objeto para manejar la comunicación Bluetooth
 BluetoothSerial SerialBT;
