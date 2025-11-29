@@ -200,11 +200,12 @@ if (plazaIndex != -1) {
         }
     }
     
-    command += "\n"; // Fin de línea
+    //command += "\n"; // Fin de línea
 
     // ** PUNTO CLAVE: ENVÍO VÍA BLUETOOTH **
     if (SerialBT.hasClient()) {
         SerialBT.println(command); 
+        SerialBT.flush();
         Serial.println("Comando BT enviado al PIC: ");
         Serial.println(command);
     } else {
@@ -445,13 +446,25 @@ void loop() {
   }
 
   // 2. Leer datos del PIC
-  if (SerialBT.available()) {
+  if (SerialBT.available())
+  {
     String data = SerialBT.readStringUntil('\n'); // Lee la trama completa hasta el newline
-    data.trim(); 
-    if (data.length() > 0) {
+    data.trim();
+    if (data.length() > 0)
+    {
       Serial.print("BT Data RAW: ");
       Serial.println(data);
       parseAndApplySerialData(data); // Procesa el mensaje S:L,O,L,L
+    }
+    else if (data.startsWith("ACK:"))
+    {
+      Serial.print("PIC ACK: ");
+      Serial.println(data);
+    }
+    else
+    {
+      Serial.print("IGNORED BT: ");
+      Serial.println(data);
     }
   }
 }
