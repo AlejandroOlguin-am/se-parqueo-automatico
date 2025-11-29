@@ -15,7 +15,12 @@
 
 /* Constantes */
 const int8 NUM_SPACES = 4;
-#define SERVO_PIN PIN_C0
+// Pines Servos
+#define NUM_SERVOS 4
+const int8 servoPins[NUM_SERVOS] = { PIN_C0, PIN_C1, PIN_C2, PIN_C3 };
+
+// Nuevo estado de los 4 servos: 1=Abierto, 0=Cerrado
+int1 barrier_target[NUM_SERVOS] = {1, 1, 1, 1};
 
 /* Pines Sensores */
 const int8 sensorPins[NUM_SPACES] = { PIN_A0, PIN_A1, PIN_A2, PIN_A3 };
@@ -95,6 +100,20 @@ void servo_pulse_once() {
       output_low(SERVO_PIN);
    }
 }
+// Genera pulsos para todos los servos
+void update_servos() {
+    for (int8 i = 0; i < NUM_SERVOS; i++) {
+        if (barrier_target[i] == 1) { // Abrir
+            output_high(servoPins[i]);
+            delay_us(1500); 
+            output_low(servoPins[i]);
+        } else { // Cerrar
+            output_high(servoPins[i]);
+            delay_us(600); 
+            output_low(servoPins[i]);
+        }
+    }
+}
 
 char read_sensor_debounce(int8 pin) {
    if(input(pin)) { delay_ms(10); if(input(pin)) return 'O'; }
@@ -129,15 +148,16 @@ void parse_rx_line(char *buffer) {
          
          i++;
       }
+      // Lógica de barrera individual
+      if(c == 'R') { 
+            barrier_target[i] = 0; // Cerrar barrera de la plaza i si se reservó (R)
+        } 
+        else if (c == 'L') {
+            barrier_target[i] = 1; // Abrir barrera de la plaza i si se liberó (L)
+        }
+
       p_idx++;
    }
-   
-   // Lógica de Barrera: Si hay AL MENOS UNA reserva ('R'), bajamos barrera
-   if(hay_reserva) barrier_target = 0; // Cerrar
-   else barrier_target = 1; // Abrir
-   
-   // Debug de retorno (opcional)
-   // printf("ACK:%s\n", buffer); 
 }
 
 /* --- MAIN --- */
@@ -199,7 +219,8 @@ void main() {
       }
       
       // 5. CONTROL SERVO
-      servo_pulse_once();
+      //servo_pulse_once();
+      update_servos();
       
       delay_ms(20);
    }
