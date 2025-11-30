@@ -39,10 +39,16 @@ int8 lcd_i2c_addr = 0;
 // Función auxiliar: Genera el pulso de Enable (E)
 void lcd_pulse_en(int8 data) {
     // 1. E HIGH
-    i2c_write(lcd_i2c_addr, data | PIN_EN);
+    i2c_start();
+    i2c_write(lcd_i2c_addr << 1);
+    i2c_write(data | PIN_EN);
+    i2c_stop();
     delay_us(50);
     // 2. E LOW
-    i2c_write(lcd_i2c_addr, data & ~PIN_EN);
+    i2c_start();
+    i2c_write(lcd_i2c_addr << 1);
+    i2c_write(data & ~PIN_EN);
+    i2c_stop();
     delay_us(50);
 }
 
@@ -50,7 +56,7 @@ void lcd_pulse_en(int8 data) {
 void lcd_write_nibble(int8 nibble, int8 mode) {
     int8 data = (nibble << 4) | mode | backlight_state;
     i2c_start();
-    i2c_write(lcd_i2c_addr);
+    i2c_write(lcd_i2c_addr << 1);
     i2c_write(data);
     i2c_stop();
     lcd_pulse_en(data);
