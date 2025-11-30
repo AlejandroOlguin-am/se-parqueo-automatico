@@ -13,7 +13,7 @@
 /* UART Configuración */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1, ERRORS)
 
-#include "LCD_I2C.c"
+#include "lcd_i2c_ale.c" // Librería LCD I2C
 #define LCD_I2C_ADDRESS 0x4E
 #use i2c(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
 
@@ -167,18 +167,18 @@ void update_lcd_info() {
    // Si tienes una librería estándar, usa lcd_gotoxy y printf/fprintf
    lcd_gotoxy(1,1);
    // Ejemplo: "Libres: 2 Rsv: 1"
-   fprintf(LCD_I2C_ADDRESS, "Libres:%u Rsv:%u  ", libres, reservados); // Asume que tu librería usa fprintf(address, ...)
+   fprintf(lcd_putc, "Libres:%u Rsv:%u  ", libres, reservados); // Asume que tu librería usa fprintf(address, ...)
    
    // --- Línea 2: Estado del Sistema (Podemos mostrar la comunicación BT) ---
    lcd_gotoxy(1,2);
-
+   fprintf(lcd_putc, "Bienvenido!     ");
    // Ejemplo de mensaje de estado:
    if (reservados > 0) {
-      fprintf(LCD_I2C_ADDRESS, "Esperando Cliente "); 
+      fprintf(lcd_putc, "Esperando Cliente "); 
    } else if (libres == 0) {
-      fprintf(LCD_I2C_ADDRESS, "PARQUEO LLENO!  ");
+      fprintf(lcd_putc, "PARQUEO LLENO!  ");
    } else {
-      fprintf(LCD_I2C_ADDRESS, "Bienvenido!     ");
+      fprintf(lcd_putc, "Bienvenido!     ");
    }
 }
 /* --- MAIN --- */
