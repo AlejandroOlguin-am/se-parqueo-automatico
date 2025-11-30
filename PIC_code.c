@@ -17,7 +17,7 @@
 const int8 NUM_SPACES = 4;
 // Pines Servos
 #define NUM_SERVOS 4
-const int8 servoPins[NUM_SERVOS] = { PIN_C0, PIN_C1, PIN_C2, PIN_C3 };
+const int8 servoPins[NUM_SERVOS] = { PIN_C0, PIN_C1, PIN_C2, PIN_E0 };
 
 // Nuevo estado de los 4 servos: 1=Abierto, 0=Cerrado
 int1 barrier_target[NUM_SERVOS] = {1, 1, 1, 1};
