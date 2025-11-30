@@ -164,21 +164,23 @@ void update_lcd_info() {
    }
    
    // --- Línea 1: Libres y Reservados ---
-   // Si tienes una librería estándar, usa lcd_gotoxy y printf/fprintf
    lcd_gotoxy(1,1);
-   // Ejemplo: "Libres: 2 Rsv: 1"
-   fprintf(lcd_putc, "Libres:%u Rsv:%u  ", libres, reservados); // Asume que tu librería usa fprintf(address, ...)
+   lcd_putc('L'); lcd_putc('i'); lcd_putc('b'); lcd_putc('r'); lcd_putc('e'); lcd_putc('s'); lcd_putc(':');
+   if(libres >= 10) lcd_putc((libres / 10) + '0');
+   lcd_putc((libres % 10) + '0');
+   lcd_putc(' '); lcd_putc('R'); lcd_putc('s'); lcd_putc('v'); lcd_putc(':');
+   if(reservados >= 10) lcd_putc((reservados / 10) + '0');
+   lcd_putc((reservados % 10) + '0');
+   lcd_putc(' '); lcd_putc(' ');
    
-   // --- Línea 2: Estado del Sistema (Podemos mostrar la comunicación BT) ---
+   // --- Línea 2: Estado del Sistema ---
    lcd_gotoxy(1,2);
-   fprintf(lcd_putc, "Bienvenido!     ");
-   // Ejemplo de mensaje de estado:
    if (reservados > 0) {
-      fprintf(lcd_putc, "Esperando Cliente "); 
+      lcd_putc('E'); lcd_putc('s'); lcd_putc('p'); lcd_putc('e'); lcd_putc('r'); lcd_putc('a'); lcd_putc('n'); lcd_putc('d'); lcd_putc('o'); lcd_putc(' ');
    } else if (libres == 0) {
-      fprintf(lcd_putc, "PARQUEO LLENO!  ");
+      lcd_putc('L'); lcd_putc('L'); lcd_putc('E'); lcd_putc('N'); lcd_putc('O'); lcd_putc('!'); lcd_putc(' ');
    } else {
-      fprintf(lcd_putc, "Bienvenido!     ");
+      lcd_putc('B'); lcd_putc('i'); lcd_putc('e'); lcd_putc('n'); lcd_putc('v'); lcd_putc('e'); lcd_putc('n'); lcd_putc('i'); lcd_putc('d'); lcd_putc('o');
    }
 }
 /* --- MAIN --- */
@@ -200,7 +202,8 @@ void main() {
    // --- INICIALIZACIÓN LCD ---
    lcd_init(LCD_I2C_ADDRESS); // Tu función de init debe recibir la dirección
    lcd_clear(); 
-   fprintf(lcd_putc, "SISTEMA INICIANDO");
+   lcd_putc('S'); lcd_putc('I'); lcd_putc('S'); lcd_putc('T'); lcd_putc('E'); lcd_putc('M'); lcd_putc('A'); lcd_putc(' ');
+   lcd_putc('I'); lcd_putc('N'); lcd_putc('I'); lcd_putc('C'); lcd_putc('I'); lcd_putc('A'); lcd_putc('N'); lcd_putc('D');
    delay_ms(500);
    
    // Estado Inicial

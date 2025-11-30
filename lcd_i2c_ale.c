@@ -50,11 +50,10 @@ void lcd_pulse_en(int8 data) {
 void lcd_write_nibble(int8 nibble, int8 mode) {
     int8 data = (nibble << 4) | mode | backlight_state;
     i2c_start();
-    if(i2c_write(lcd_i2c_addr, data)) {
-       // Opcional: Manejo de errores si el PCF8574 no responde (ACK fallido)
-    }
-    lcd_pulse_en(data);
+    i2c_write(lcd_i2c_addr);
+    i2c_write(data);
     i2c_stop();
+    lcd_pulse_en(data);
 }
 
 // Envía un comando de 8 bits (Instrucción)
