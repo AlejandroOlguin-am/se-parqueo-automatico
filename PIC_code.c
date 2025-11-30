@@ -13,9 +13,10 @@
 /* UART Configuración */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1, ERRORS)
 
-#include "lcd_i2c_ale.c" // Librería LCD I2C
-#define LCD_I2C_ADDRESS 0x4E
-#use i2c(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
+#I2C(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
+
+#define ADDRESS_LCD 0x4E
+#include <LCD_I2C.c>
 
 /* Constantes */
 const int8 NUM_SPACES = 4;
@@ -200,7 +201,7 @@ void main() {
    enable_interrupts(GLOBAL);
 
    // --- INICIALIZACIÓN LCD ---
-   lcd_init(LCD_I2C_ADDRESS); // Tu función de init debe recibir la dirección
+   lcd_init(); // Tu función de init debe recibir la dirección
    lcd_clear(); 
    lcd_putc('S'); lcd_putc('I'); lcd_putc('S'); lcd_putc('T'); lcd_putc('E'); lcd_putc('M'); lcd_putc('A'); lcd_putc(' ');
    lcd_putc('I'); lcd_putc('N'); lcd_putc('I'); lcd_putc('C'); lcd_putc('I'); lcd_putc('A'); lcd_putc('N'); lcd_putc('D');
