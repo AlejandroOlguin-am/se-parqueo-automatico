@@ -214,7 +214,14 @@ if (plazaIndex != -1) {
       plazas[plazaIndex].estado_reserva = 'N';
       Serial.printf("Plaza %s CANCELADA localmente\n", plazaId.c_str());
     }
-    
+    else if (action == "M") {
+        plazas[plazaIndex].estado_reserva = 'M'; // Forzar mantenimiento
+        server.send(200, "application/json", "{\"success\": true, \"message\": \"Plaza en MANTENIMIENTO\"}");
+    }
+    else if (action == "X") {
+        plazas[plazaIndex].estado_reserva = 'N'; // Volver a estado normal (Ninguna reserva)
+        server.send(200, "application/json", "{\"success\": true, \"message\": \"Mantenimiento finalizado\"}");
+    }
     // Aplicar la lógica para actualizar estado_final
     applyLogic(plazaIndex);
     
@@ -287,7 +294,6 @@ h1 { text-align: center; color: #1e3c72; margin-bottom: 30px; }
 
 // Script JS para la lógica del Frontend
 const char* SCRIPT_JS = R"rawliteral(
-// Función principal para consultar el estado del ESP32
 function updateStatus() {
     fetch('/status') 
     .then(response => response.json())
@@ -295,63 +301,85 @@ function updateStatus() {
         data.forEach(plaza => {
             const card = document.getElementById(`${plaza.id}-card`);
             const statusText = card.querySelector('.status-text');
-            const actionBtn = card.querySelector('.action-btn');
-
-            // 1. Actualizar clases (L, O, R, M) para cambiar color
-            card.className = `plaza-card ${plaza.status}`;
+            // Buscamos el contenedor de acciones (o lo creamos si usaste mi HTML anterior, 
+            // pero para no complicar, asumiremos que reemplazamos el boton existente)
             
-            // 2. Actualizar texto de estado
-            statusText.textContent = plaza.text;
+            // Vamos a regenerar el HTML interno de la tarjeta para incluir los 2 botones
+            let btnMainClass = '';
+            let btnMainText = '';
+            let btnMainAction = '';
+            let btnMaintClass = 'action-btn btn-maint'; // Clase para boton mantenimiento
+            let btnMaintText = '🔧';
+            let btnMaintAction = 'M'; // Activar mantenimiento
             
-            // 3. Actualizar el botón (Reservar/Cancelar/No Disponible)
-            actionBtn.disabled = !plaza.can_reserve && plaza.status !== 'R'; // Deshabilita si no está L y no está R
-            actionBtn.setAttribute('data-current-status', plaza.status); // Guardamos el estado actual
-
-            if (plaza.status === 'R') {
-                actionBtn.textContent = 'Cancelar Reserva';
-                actionBtn.className = 'action-btn btn-cancel';
-            } else if (plaza.status === 'L') {
-                actionBtn.textContent = 'Reservar';
-                actionBtn.className = 'action-btn btn-reserve';
-            } else { // Ocupado o Mantenimiento
-                actionBtn.textContent = 'No Disponible';
-                actionBtn.className = 'action-btn';
+            // Logica visual
+            if (plaza.status === 'M') {
+                btnMainText = 'En Mantenimiento';
+                btnMainClass = 'action-btn'; 
+                btnMainAction = ''; // No hace nada
+                btnMaintText = '✅ Hab'; // Habilitar
+                btnMaintAction = 'X'; // X = Salir de mantenimiento (Exit)
+                card.className = 'plaza-card M';
+            } else if (plaza.status === 'R') {
+                btnMainText = 'Cancelar Reserva';
+                btnMainClass = 'action-btn btn-cancel';
+                btnMainAction = 'C';
+                card.className = 'plaza-card R';
+            } else if (plaza.status === 'O') {
+                btnMainText = 'Ocupado';
+                btnMainClass = 'action-btn';
+                btnMainAction = '';
+                card.className = 'plaza-card O';
+            } else { // Libre
+                btnMainText = 'Reservar';
+                btnMainClass = 'action-btn btn-reserve';
+                btnMainAction = 'R';
+                card.className = 'plaza-card L';
             }
+
+            statusText.textContent = plaza.text;
+
+            // Inyectamos HTML de botones dinámicamente
+            // Boton Principal + Boton Mantenimiento (pequeño al lado)
+            const buttonsHTML = `
+                <div style="display:flex; gap:5px; justify-content:center;">
+                    <button class="${btnMainClass}" onclick="sendAction('${plaza.id}', '${btnMainAction}')" ${btnMainAction==''?'disabled':''}>${btnMainText}</button>
+                    <button class="${btnMaintClass}" style="background-color:#6c757d; width:50px;" onclick="sendAction('${plaza.id}', '${btnMaintAction}')">${btnMaintText}</button>
+                </div>
+            `;
+            
+            // Actualizamos solo si cambio para no parpadear, o simplificamos reemplazando el container de botones
+            // Nota: Para simplificar tu codigo actual, busca el div de botones o añádelo en el HTML
+            let actionContainer = card.querySelector('.actions');
+            if(!actionContainer) {
+                 // Si no existe container, lo creamos (esto va al final de la card)
+                 const newDiv = document.createElement('div');
+                 newDiv.className = 'actions';
+                 card.appendChild(newDiv);
+                 actionContainer = newDiv;
+            }
+            actionContainer.innerHTML = buttonsHTML;
         });
     })
-    .catch(error => console.error('Error al obtener estado:', error));
+    .catch(error => console.error('Error:', error));
 }
 
-// Manejador de eventos para el botón de Reserva/Cancelación
+// Nueva función global para enviar acciones
+function sendAction(plazaId, action) {
+    if(!action) return;
+    
+    fetch('/reserve', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ plaza: plazaId, action: action })
+    })
+    .then(r => r.json())
+    .then(d => { alert(d.message); updateStatus(); });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Inicializa y repite la consulta cada 2 segundos
     updateStatus(); 
     setInterval(updateStatus, 2000); 
-
-    document.getElementById('status-container').addEventListener('click', function(e) {
-        if (e.target.classList.contains('action-btn') && !e.target.disabled) {
-            const plazaId = e.target.getAttribute('data-plaza-id');
-            const currentStatus = e.target.getAttribute('data-current-status');
-            
-            // Si está Libre -> Reservar ('R'); Si está Reservado -> Cancelar ('C')
-            const action = (currentStatus === 'L') ? 'R' : 'C'; 
-
-            // Crear el cuerpo de la petición POST
-            const payload = JSON.stringify({ plaza: plazaId, action: action });
-            
-            fetch('/reserve', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: payload
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert(data.message); 
-                updateStatus(); // Forzar actualización para ver el cambio
-            })
-            .catch(error => console.error('Error de reserva:', error));
-        }
-    });
 });
 )rawliteral";
 
