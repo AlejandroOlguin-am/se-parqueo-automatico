@@ -199,8 +199,8 @@ void main() {
 
    // --- INICIALIZACIÓN LCD ---
    lcd_init(LCD_I2C_ADDRESS); // Tu función de init debe recibir la dirección
-   lcd_clear(LCD_I2C_ADDRESS); 
-   fprintf(LCD_I2C_ADDRESS, "SISTEMA INICIANDO");
+   lcd_clear(); 
+   fprintf(lcd_putc, "SISTEMA INICIANDO");
    delay_ms(500);
    
    // Estado Inicial

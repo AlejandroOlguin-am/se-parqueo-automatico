@@ -33,13 +33,16 @@ void lcd_clear();
 // --- Buffer de datos (Estado actual de Backlight y pines de control) ---
 int8 backlight_state = 0; // 0 o PIN_BL
 
+// Dirección I2C usada internamente por la librería. Se configura en `lcd_init`.
+int8 lcd_i2c_addr = 0;
+
 // Función auxiliar: Genera el pulso de Enable (E)
 void lcd_pulse_en(int8 data) {
     // 1. E HIGH
-    i2c_write(LCD_I2C_ADDRESS, data | PIN_EN);
+    i2c_write(lcd_i2c_addr, data | PIN_EN);
     delay_us(50);
     // 2. E LOW
-    i2c_write(LCD_I2C_ADDRESS, data & ~PIN_EN);
+    i2c_write(lcd_i2c_addr, data & ~PIN_EN);
     delay_us(50);
 }
 
@@ -47,7 +50,7 @@ void lcd_pulse_en(int8 data) {
 void lcd_write_nibble(int8 nibble, int8 mode) {
     int8 data = (nibble << 4) | mode | backlight_state;
     i2c_start();
-    if(i2c_write(LCD_I2C_ADDRESS, data)) {
+    if(i2c_write(lcd_i2c_addr, data)) {
        // Opcional: Manejo de errores si el PCF8574 no responde (ACK fallido)
     }
     lcd_pulse_en(data);
@@ -61,14 +64,15 @@ void lcd_command(int8 cmd) {
 }
 
 // Envía un byte de datos (Carácter)
-void void lcd_data(int8 data) {
+void lcd_data(int8 data) {
     lcd_write_nibble(data >> 4, PIN_RS); // High nibble (RS=1)
     lcd_write_nibble(data & 0x0F, PIN_RS); // Low nibble (RS=1)
 }
 
 // Inicialización de la LCD
 void lcd_init(int8 address) {
-    // Establecer la dirección I2C (ya lo hicimos con #define, pero es buena práctica)
+    // Establecer la dirección I2C (se pasa desde el main)
+    lcd_i2c_addr = address;
     // Inicialización del display según protocolo 4-bit
     delay_ms(50); // Tiempo de espera inicial
 
