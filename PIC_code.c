@@ -13,6 +13,10 @@
 /* UART Configuración */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1, ERRORS)
 
+#include "LCD_I2C.c"
+#define LCD_I2C_ADDRESS 0x4E
+#use i2c(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
+
 /* Constantes */
 const int8 NUM_SPACES = 4;
 // Pines Servos
@@ -147,6 +151,36 @@ void parse_rx_line(char *buffer) {
    }
 }
 
+// Función para actualizar pantalla con información de estado
+void update_lcd_info() {
+   int8 libres = 0;
+   int8 reservados = 0;
+   int8 i;
+   
+   // Contar estados en array 'final' (lo que dicta el ESP32)
+   for(i=0; i<NUM_SPACES; i++) {
+      if(final[i] == 'L') libres++; // Estado Libre
+      if(final[i] == 'R') reservados++; // Estado Reservado
+   }
+   
+   // --- Línea 1: Libres y Reservados ---
+   // Si tienes una librería estándar, usa lcd_gotoxy y printf/fprintf
+   lcd_gotoxy(1,1);
+   // Ejemplo: "Libres: 2 Rsv: 1"
+   fprintf(LCD_I2C_ADDRESS, "Libres:%u Rsv:%u  ", libres, reservados); // Asume que tu librería usa fprintf(address, ...)
+   
+   // --- Línea 2: Estado del Sistema (Podemos mostrar la comunicación BT) ---
+   lcd_gotoxy(1,2);
+
+   // Ejemplo de mensaje de estado:
+   if (reservados > 0) {
+      fprintf(LCD_I2C_ADDRESS, "Esperando Cliente "); 
+   } else if (libres == 0) {
+      fprintf(LCD_I2C_ADDRESS, "PARQUEO LLENO!  ");
+   } else {
+      fprintf(LCD_I2C_ADDRESS, "Bienvenido!     ");
+   }
+}
 /* --- MAIN --- */
 void main() {
    int i;
@@ -157,11 +191,17 @@ void main() {
    set_tris_a(0x0F); // Entradas Sensores
    set_tris_b(0x00); // Salidas LEDs
    set_tris_d(0x00); // Salidas LEDs
-   set_tris_c(0x80); // RC7 RX (In), RC6 TX (Out), RC0 Servo (Out)
+   set_tris_c(0x40); // RC7 RX (In), RC6 TX (Out), RC0 Servo (Out)
    
    // Inicializar Hardware
    enable_interrupts(INT_RDA);
    enable_interrupts(GLOBAL);
+
+   // --- INICIALIZACIÓN LCD ---
+   lcd_init(LCD_I2C_ADDRESS); // Tu función de init debe recibir la dirección
+   lcd_clear(LCD_I2C_ADDRESS); 
+   fprintf(LCD_I2C_ADDRESS, "SISTEMA INICIANDO");
+   delay_ms(500);
    
    // Estado Inicial
    for(i=0; i<NUM_SPACES; i++) {
@@ -202,6 +242,9 @@ void main() {
       tick_counter++;
       if(tick_counter >= 100) { // 100 * 20ms = 2000ms
          enviar_estados_sensores();
+
+         update_lcd_info();
+
          tick_counter = 0;
       }
       
