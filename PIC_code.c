@@ -1,36 +1,28 @@
 /* PIC16F877A - Sistema Parking FINAL CORREGIDO
-   CCS C - 4 MHz
-   Sensores: RA0..RA3
-   LEDs:     RB0..RB7, RD0..RD7
-   Servo:    PIN_C0
-   UART:     HC-05 (9600 baud)
+   CCS C - 20 MHz (Corregido FUSE HS)
 */
 
 #include <16F877A.h>
-#fuses XT, NOWDT, NOLVP, NOBROWNOUT
+// IMPORTANTE: Cambiado XT a HS (Obligatorio para cristales > 4MHz)
+#fuses HS, NOWDT, NOLVP, NOBROWNOUT
 #use delay(clock=20000000)
 
 /* UART Configuración */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1, ERRORS)
 
-#I2C(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
+// Configuración I2C
+#use I2C(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
 
 #define ADDRESS_LCD 0x4E
-#include <LCD_I2C.c>
+#include <LCD_I2C.c> // Asegúrate de que esta librería use las funciones I2C de CCS
 
-/* Constantes */
+/* Constantes y Variables */
 const int8 NUM_SPACES = 4;
-// Pines Servos
 #define NUM_SERVOS 4
 const int8 servoPins[NUM_SERVOS] = { PIN_C0, PIN_C1, PIN_C2, PIN_E0 };
-
-// Nuevo estado de los 4 servos: 1=Abierto, 0=Cerrado
 int1 barrier_target[NUM_SERVOS] = {1, 1, 1, 1};
 
-/* Pines Sensores */
 const int8 sensorPins[NUM_SPACES] = { PIN_A0, PIN_A1, PIN_A2, PIN_A3 };
-
-/* Mapeo LEDs */
 const int8 ledPins[NUM_SPACES][4] = {
    { PIN_B0, PIN_B1, PIN_B2, PIN_B3 },
    { PIN_B4, PIN_B5, PIN_B6, PIN_B7 },
@@ -38,37 +30,28 @@ const int8 ledPins[NUM_SPACES][4] = {
    { PIN_D4, PIN_D5, PIN_D6, PIN_D7 }
 };
 
-/* Variables Globales */
 #define RXBUF_LEN 40
 char recibido[RXBUF_LEN];
 int8 rxidx = 0;
-int1 buffer_full = 0; // Bandera para indicar al main que hay datos
+int1 buffer_full = 0;
 
 char physical[NUM_SPACES];
 char prev_physical[NUM_SPACES];
-// Estado final recibido del ESP: L, O, R, M
 char final[NUM_SPACES] = {'L', 'L', 'L', 'L'}; 
 
-
-/* --- INTERRUPCIÓN RDA (Recepción Serial) --- */
+/* --- INTERRUPCIÓN RDA --- */
 #int_rda
 void rda_isr() {
    char c;
    if(kbhit()) {
       c = getch();
-      
-      // Ignorar el retorno de carro (\r) que envía println
       if(c == '\r') return; 
-      
-      // Si llega nueva línea (\n), terminamos el paquete
       if(c == '\n') {
-         recibido[rxidx] = '\0'; // Finalizar string correctamente
-         buffer_full = 1;        // Avisar al main
-         rxidx = 0;              // Resetear índice para el próximo
+         recibido[rxidx] = '\0';
+         buffer_full = 1;        
+         rxidx = 0;              
          return;
       }
-      
-      // Guardar carácter si hay espacio
       if(rxidx < (RXBUF_LEN - 1)) {
          recibido[rxidx] = c;
          rxidx++;
@@ -76,8 +59,7 @@ void rda_isr() {
    }
 }
 
-/* --- FUNCIONES AUXILIARES --- */
-
+/* --- FUNCIONES --- */
 void set_space_led(int8 space, int8 state) {
    int8 i;
    for (i = 0; i < 4; i++) {
@@ -87,11 +69,10 @@ void set_space_led(int8 space, int8 state) {
 }
 
 void enviar_estados_sensores() {
-   // Envía: S:L,O,L,L
-   printf("S:%c,%c,%c,%c\n", physical[0], physical[1], physical[2], physical[3]);
+   // Enviamos \r\n explícito para ayudar al parser del ESP32
+   printf("S:%c,%c,%c,%c\r\n", physical[0], physical[1], physical[2], physical[3]);
 }
 
-// Genera pulsos para todos los servos
 void update_servos() {
     for (int8 i = 0; i < NUM_SERVOS; i++) {
         if (barrier_target[i] == 1) { // Abrir
@@ -112,120 +93,86 @@ char read_sensor_debounce(int8 pin) {
 }
 
 void parse_rx_line(char *buffer) {
-   // Esperamos formato: R:X,X,X,X
-   // buffer[0] debe ser 'R' y buffer[1] debe ser ':'
    if(buffer[0] != 'R' || buffer[1] != ':') return;
    
-   // Puntero manual para recorrer la cadena "R:L,O,R,M"
-   // Índices esperados: 
-   // R : L , O , R , M
-   // 0 1 2 3 4 5 6 7 8
-   
    int8 i = 0;
-   int8 p_idx = 2; // Empezamos después de "R:"
-   int1 hay_reserva = 0;
+   int8 p_idx = 2;
    
    while(buffer[p_idx] != '\0' && i < NUM_SPACES) {
       char c = buffer[p_idx];
-      
       if(c == 'L' || c == 'O' || c == 'R' || c == 'M') {
          final[i] = c;
-         
-         // Actualizar LED inmediatamente
-         if(c == 'L') set_space_led(i, 0); // Verde
-         if(c == 'O') set_space_led(i, 1); // Rojo
-         if(c == 'R') { set_space_led(i, 2); hay_reserva = 1; } // Azul
-         if(c == 'M') set_space_led(i, 3); // Amarillo
-         
-         // Lógica de barrera individual
-      if(c == 'R') { 
-            barrier_target[i] = 0; // Cerrar barrera de la plaza i si se reservó (R)
-        } 
-        else if (c == 'L') {
-            barrier_target[i] = 1; // Abrir barrera de la plaza i si se liberó (L)
-        }
-
+         // Actualización de LEDs y Barreras según lógica recibida
+         if(c == 'L') { set_space_led(i, 0); barrier_target[i] = 1; }
+         if(c == 'O') { set_space_led(i, 1); } // Ocupado, barrera se queda como estaba o manual
+         if(c == 'R') { set_space_led(i, 2); barrier_target[i] = 0; }
+         if(c == 'M') { set_space_led(i, 3); }
          i++;
       }
-      
       p_idx++;
    }
 }
 
-// Función para actualizar pantalla con información de estado
 void update_lcd_info() {
    int8 libres = 0;
    int8 reservados = 0;
    int8 i;
    
-   // Contar estados en array 'final' (lo que dicta el ESP32)
    for(i=0; i<NUM_SPACES; i++) {
-      if(final[i] == 'L') libres++; // Estado Libre
-      if(final[i] == 'R') reservados++; // Estado Reservado
+      if(final[i] == 'L') libres++;
+      if(final[i] == 'R') reservados++;
    }
    
-   // --- Línea 1: Libres y Reservados ---
    lcd_gotoxy(1,1);
-   lcd_putc('L'); lcd_putc('i'); lcd_putc('b'); lcd_putc('r'); lcd_putc('e'); lcd_putc('s'); lcd_putc(':');
-   if(libres >= 10) lcd_putc((libres / 10) + '0');
-   lcd_putc((libres % 10) + '0');
-   lcd_putc(' '); lcd_putc('R'); lcd_putc('s'); lcd_putc('v'); lcd_putc(':');
-   if(reservados >= 10) lcd_putc((reservados / 10) + '0');
-   lcd_putc((reservados % 10) + '0');
-   lcd_putc(' '); lcd_putc(' ');
+   printf(lcd_putc, "Libres:%u Rsv:%u  ", libres, reservados);
    
-   // --- Línea 2: Estado del Sistema ---
    lcd_gotoxy(1,2);
    if (reservados > 0) {
-      lcd_putc('E'); lcd_putc('s'); lcd_putc('p'); lcd_putc('e'); lcd_putc('r'); lcd_putc('a'); lcd_putc('n'); lcd_putc('d'); lcd_putc('o'); lcd_putc(' ');
+      lcd_putc("Esperando...    ");
    } else if (libres == 0) {
-      lcd_putc('L'); lcd_putc('L'); lcd_putc('E'); lcd_putc('N'); lcd_putc('O'); lcd_putc('!'); lcd_putc(' ');
+      lcd_putc("LLENO!          ");
    } else {
-      lcd_putc('B'); lcd_putc('i'); lcd_putc('e'); lcd_putc('n'); lcd_putc('v'); lcd_putc('e'); lcd_putc('n'); lcd_putc('i'); lcd_putc('d'); lcd_putc('o');
+      lcd_putc("Bienvenido      ");
    }
 }
-/* --- MAIN --- */
+
 void main() {
    int i;
    int16 tick_counter = 0;
    int1 changed = 0;
    
-   // Configuración Puertos
-   set_tris_a(0x0F); // Entradas Sensores
-   set_tris_b(0x00); // Salidas LEDs
-   set_tris_d(0x00); // Salidas LEDs
-   set_tris_c(0x98); // RC7 RX (In), RC6 TX (Out), RC0 Servo (Out)
+   set_tris_a(0x0F);
+   set_tris_b(0x00);
+   set_tris_d(0x00);
+   set_tris_c(0x98); // RC7(RX)=In, RC6(TX)=Out, RC3/4(I2C)
    
-   // Inicializar Hardware
    enable_interrupts(INT_RDA);
    enable_interrupts(GLOBAL);
 
-   // --- INICIALIZACIÓN LCD ---
-   lcd_init(); // Tu función de init debe recibir la dirección
+   lcd_init();
+   delay_ms(100); // Dar tiempo al LCD para iniciar
    lcd_clear(); 
-   lcd_putc('S'); lcd_putc('I'); lcd_putc('S'); lcd_putc('T'); lcd_putc('E'); lcd_putc('M'); lcd_putc('A'); lcd_putc(' ');
-   lcd_putc('I'); lcd_putc('N'); lcd_putc('I'); lcd_putc('C'); lcd_putc('I'); lcd_putc('A'); lcd_putc('N'); lcd_putc('D');
-   //delay_ms(500);
+   printf(lcd_putc, "SISTEMA INICIADO");
+   delay_ms(1000);
+   lcd_clear();
    
    // Estado Inicial
    for(i=0; i<NUM_SPACES; i++) {
-      set_space_led(i, 0); // Todos Verde al inicio
+      set_space_led(i, 0); 
       physical[i] = read_sensor_debounce(sensorPins[i]);
       prev_physical[i] = physical[i];
    }
    
-   delay_ms(50); // Estabilizar
    enviar_estados_sensores();
    
    while(TRUE) {
-      
-      // 1. PROCESAR DATOS RECIBIDOS (Si la interrupción marcó buffer_full)
+      // 1. Procesar Bluetooth
       if(buffer_full) {
          parse_rx_line(recibido);
-         buffer_full = 0; // Limpiar bandera
+         buffer_full = 0;
       }
       
-      // 2. LEER SENSORES
+      // 2. Sensores
       changed = 0;
       for(i=0; i<NUM_SPACES; i++) {
          char lectura = read_sensor_debounce(sensorPins[i]);
@@ -235,36 +182,26 @@ void main() {
          }
       }
       
-      // 3. ENVIAR SI HAY CAMBIOS
       if(changed) {
          enviar_estados_sensores();
-         // Actualizar previos
          for(i=0; i<NUM_SPACES; i++) prev_physical[i] = physical[i];
       }
       
-      // 4. ENVÍO PERIÓDICO (Heartbeat) - Cada ~2 segundos
+      // 3. Heartbeat y LCD
       tick_counter++;
-      if(tick_counter >= 100) { // 100 * 20ms = 2000ms
-         
-         // 1. Deshabilitar la recepción UART
-         // Esto previene que se procese una nueva trama del ESP32 mientras se usa el I2C.
-         disable_interrupts(INT_RDA); 
-         
-         // 2. Tarea crítica: Actualizar LCD (Usa I2C y bloquea el CPU)
+      if(tick_counter >= 50) { // Ajustado tiempo (aprox 1s)
+         // NO DESHABILITAMOS INTERRUPCIONES AQUI
+         // El buffer RDA y los 20MHz del PIC pueden manejarlo.
          update_lcd_info(); 
          
-         // 3. Re-habilitar la recepción UART
-         enable_interrupts(INT_RDA); 
-
-         // 4. Enviar estado de sensores (TX)
+         // Pequeño delay para estabilizar voltaje tras uso de LCD antes de transmitir
+         delay_ms(10); 
          enviar_estados_sensores();
          
          tick_counter = 0;
       }
       
-      // 5. CONTROL SERVO
       update_servos();
-      
       delay_ms(20);
    }
 }
