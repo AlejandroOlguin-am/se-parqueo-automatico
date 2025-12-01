@@ -8,7 +8,7 @@
 
 #include <16F877A.h>
 #fuses XT, NOWDT, NOLVP, NOBROWNOUT
-#use delay(clock=4000000)
+#use delay(clock=20000000)
 
 /* UART Configuración */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1, ERRORS)
@@ -194,7 +194,7 @@ void main() {
    set_tris_a(0x0F); // Entradas Sensores
    set_tris_b(0x00); // Salidas LEDs
    set_tris_d(0x00); // Salidas LEDs
-   set_tris_c(0x40); // RC7 RX (In), RC6 TX (Out), RC0 Servo (Out)
+   set_tris_c(0x98); // RC7 RX (In), RC6 TX (Out), RC0 Servo (Out)
    
    // Inicializar Hardware
    enable_interrupts(INT_RDA);
@@ -205,7 +205,7 @@ void main() {
    lcd_clear(); 
    lcd_putc('S'); lcd_putc('I'); lcd_putc('S'); lcd_putc('T'); lcd_putc('E'); lcd_putc('M'); lcd_putc('A'); lcd_putc(' ');
    lcd_putc('I'); lcd_putc('N'); lcd_putc('I'); lcd_putc('C'); lcd_putc('I'); lcd_putc('A'); lcd_putc('N'); lcd_putc('D');
-   delay_ms(500);
+   //delay_ms(500);
    
    // Estado Inicial
    for(i=0; i<NUM_SPACES; i++) {
@@ -214,7 +214,7 @@ void main() {
       prev_physical[i] = physical[i];
    }
    
-   delay_ms(500); // Estabilizar
+   delay_ms(50); // Estabilizar
    enviar_estados_sensores();
    
    while(TRUE) {
@@ -245,10 +245,20 @@ void main() {
       // 4. ENVÍO PERIÓDICO (Heartbeat) - Cada ~2 segundos
       tick_counter++;
       if(tick_counter >= 100) { // 100 * 20ms = 2000ms
+         
+         // 1. Deshabilitar la recepción UART
+         // Esto previene que se procese una nueva trama del ESP32 mientras se usa el I2C.
+         disable_interrupts(INT_RDA); 
+         
+         // 2. Tarea crítica: Actualizar LCD (Usa I2C y bloquea el CPU)
+         update_lcd_info(); 
+         
+         // 3. Re-habilitar la recepción UART
+         enable_interrupts(INT_RDA); 
+
+         // 4. Enviar estado de sensores (TX)
          enviar_estados_sensores();
-
-         update_lcd_info();
-
+         
          tick_counter = 0;
       }
       
