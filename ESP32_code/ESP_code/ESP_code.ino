@@ -8,10 +8,10 @@
 // ====================================================================
 
 // --- Credenciales Wi-Fi ---
-//const char* ssid = "O Creator's";
-//const char* password = "Pizza12345*";
-const char* ssid = "HUAWEI-2.4G-W8yg";
-const char* password = "PGbdC7X9";
+const char* ssid = "O Creator's";
+const char* password = "Pizza12345*";
+//const char* ssid = "HUAWEI-2.4G-W8yg";
+//const char* password = "PGbdC7X9";
 // --- Bluetooth Serial ---
 unsigned long last_pic_sync_time = 0;
 const long PIC_SYNC_INTERVAL = 8000; // 8 segundos
@@ -257,38 +257,102 @@ if (plazaIndex != -1) {
 
 // Estilos CSS
 const char* STYLE_CSS = R"rawliteral(
-body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background-color: #f0f2f5; }
-h1 { text-align: center; color: #1e3c72; margin-bottom: 30px; }
-.container { display: flex; flex-wrap: wrap; justify-content: space-around; }
-.plaza-card {
-    background-color: #fff; border-radius: 12px; box-shadow: 0 6px 15px rgba(0,0,0,0.1);
-    padding: 25px; margin: 15px; width: 100%; max-width: 280px;
-    text-align: center; transition: all 0.4s ease-in-out;
+/* 1. RESET UNIVERSAL: CRÍTICO PARA CORREGIR EL DESFASE */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
+
+body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    background-color: #f0f2f5; 
+    /* Quitamos padding del body para evitar conflictos de ancho */
+    width: 100%;
+    min-height: 100vh;
+}
+
+h1 { 
+    text-align: center; 
+    color: #1e3c72; 
+    margin: 30px 0; /* Margen solo vertical */
+    padding: 0 10px; /* Un poco de aire lateral para pantallas muy pequeñas */
+}
+
+/* CONTENEDOR PRINCIPAL */
+.container { 
+    display: flex; 
+    flex-wrap: wrap; 
+    /* Usamos center en lugar de space-around para control total */
+    justify-content: center; 
+    width: 100%;
+    padding: 20px; /* El padding va aquí, no en el body */
+    gap: 20px; /* Espacio entre tarjetas automático */
+}
+
+/* TARJETAS */
+.plaza-card {
+    background-color: #fff; 
+    border-radius: 12px; 
+    box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    padding: 25px; 
+    text-align: center; 
+    transition: all 0.4s ease-in-out;
+    
+    /* Dimensiones escritorio */
+    width: 280px; 
+    /* No usamos margin aquí, usamos gap en el container */
+}
+
 .status-text { font-size: 1.5em; font-weight: bold; margin: 10px 0; }
 
-/* Clases dinámicas para el estado */
-.L { background-color: #e6ffe6; color: #008000; border-left: 8px solid #00c853; } /* Libre (Verde) */
-.O { background-color: #ffe6e6; color: #cc0000; border-left: 8px solid #ff4444; } /* Ocupado (Rojo) */
-.R { background-color: #e6f0ff; color: #0000cc; border-left: 8px solid #3366ff; } /* Reservado (Azul) */
-.M { background-color: #fffde7; color: #ff8800; border-left: 8px solid #ffbb33; } /* Mantenimiento (Amarillo) */
+/* CLASES DE ESTADO */
+.L { background-color: #e6ffe6; color: #008000; border-left: 8px solid #00c853; }
+.O { background-color: #ffe6e6; color: #cc0000; border-left: 8px solid #ff4444; }
+.R { background-color: #e6f0ff; color: #0000cc; border-left: 8px solid #3366ff; }
+.M { background-color: #fffde7; color: #ff8800; border-left: 8px solid #ffbb33; }
 
-/* Botones */
+/* BOTONES */
 .action-btn {
-    padding: 12px 25px; font-size: 1em; margin-top: 15px; cursor: pointer;
-    border: none; border-radius: 6px; font-weight: bold;
+    display: flex; 
+    justify-content: center;
+    align-items: center;
+    padding: 12px 25px; 
+    font-size: 1em; 
+    margin-top: 15px; 
+    cursor: pointer;
+    border: none; 
+    border-radius: 6px; 
+    font-weight: bold;
     transition: background-color 0.3s;
 }
+
 .btn-reserve { background-color: #007bff; color: white; }
 .btn-reserve:hover { background-color: #0056b3; }
 .btn-cancel { background-color: #dc3545; color: white; }
 .btn-cancel:hover { background-color: #a71d2a; }
 .action-btn:disabled { background-color: #ccc; cursor: not-allowed; color: #666; }
 
-/* Responsive */
+/* BOTONES MANTENIMIENTO */
+.btn-maint { padding: 12px; width: 50px; font-size: 1.2em; }
+.btn-maint-active { background-color: #ff8800 !important; color: white; }
+.btn-maint-enable { background-color: #f7c769ff !important; font-size: 1em; }
+
+/* --- RESPONSIVE MOVIL --- */
 @media (max-width: 650px) {
-    .container { flex-direction: column; align-items: center; }
-    .plaza-card { max-width: 90%; }
+    .container { 
+        flex-direction: column; 
+        align-items: center; /* Esto centra los hijos verticalmente apilados */
+        padding: 10px; /* Menos padding en móvil */
+    }
+
+    .plaza-card { 
+        /* En móvil forzamos el ancho y el margen automático */
+        width: 100% !important; 
+        max-width: 320px; /* Tope para que no se vea gigante en tablets */
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
 }
 )rawliteral";
 
@@ -317,8 +381,9 @@ function updateStatus() {
                 btnMainText = 'En Mantenimiento';
                 btnMainClass = 'action-btn'; 
                 btnMainAction = ''; // No hace nada
-                btnMaintText = '✅ Hab'; // Habilitar
+                btnMaintText = '✅'; // Habilitar
                 btnMaintAction = 'X'; // X = Salir de mantenimiento (Exit)
+                btnMaintClass += ' btn-maint-enable';
                 card.className = 'plaza-card M';
             } else if (plaza.status === 'R') {
                 btnMainText = 'Cancelar Reserva';
@@ -344,12 +409,11 @@ function updateStatus() {
             const buttonsHTML = `
                 <div style="display:flex; gap:5px; justify-content:center;">
                     <button class="${btnMainClass}" onclick="sendAction('${plaza.id}', '${btnMainAction}')" ${btnMainAction==''?'disabled':''}>${btnMainText}</button>
-                    <button class="${btnMaintClass}" style="background-color:#6c757d; width:50px;" onclick="sendAction('${plaza.id}', '${btnMaintAction}')">${btnMaintText}</button>
+                    <button class="${btnMaintClass}" style="width:${plaza.status === 'M' ? '65px' : '50px'};" onclick="sendAction('${plaza.id}', '${btnMaintAction}')">${btnMaintText}</button>
                 </div>
             `;
             
-            // Actualizamos solo si cambio para no parpadear, o simplificamos reemplazando el container de botones
-            // Nota: Para simplificar tu codigo actual, busca el div de botones o añádelo en el HTML
+            // Acceder o crear el contenedor de acciones
             let actionContainer = card.querySelector('.actions');
             if(!actionContainer) {
                  // Si no existe container, lo creamos (esto va al final de la card)
@@ -364,7 +428,7 @@ function updateStatus() {
     .catch(error => console.error('Error:', error));
 }
 
-// Nueva función global para enviar acciones
+// Función global para enviar acciones
 function sendAction(plazaId, action) {
     if(!action) return;
     
@@ -397,10 +461,10 @@ String getHTML() {
 <body>
   <h1>🅿️ Parqueadero Inteligente - Estado</h1>
   <div id="status-container" class="container">
-    <div id="P1-card" class="plaza-card loading"><h3>Plaza P1</h3><p class="status-text">Cargando...</p><button class="action-btn" data-plaza-id="P1" disabled>...</button></div>
-    <div id="P2-card" class="plaza-card loading"><h3>Plaza P2</h3><p class="status-text">Cargando...</p><button class="action-btn" data-plaza-id="P2" disabled>...</button></div>
-    <div id="P3-card" class="plaza-card loading"><h3>Plaza P3</h3><p class="status-text">Cargando...</p><button class="action-btn" data-plaza-id="P3" disabled>...</button></div>
-    <div id="P4-card" class="plaza-card loading"><h3>Plaza P4</h3><p class="status-text">Cargando...</p><button class="action-btn" data-plaza-id="P4" disabled>...</button></div>
+    <div id="P1-card" class="plaza-card loading"><h3>Plaza P1</h3><p class="status-text">Cargando...</p></div>
+    <div id="P2-card" class="plaza-card loading"><h3>Plaza P2</h3><p class="status-text">Cargando...</p></div>
+    <div id="P3-card" class="plaza-card loading"><h3>Plaza P3</h3><p class="status-text">Cargando...</p></div>
+    <div id="P4-card" class="plaza-card loading"><h3>Plaza P4</h3><p class="status-text">Cargando...</p></div>
   </div>
   <script>%SCRIPT_JS%</script>
 </body>
