@@ -1,11 +1,23 @@
-/* PIC16F877A - Sistema Parking FINAL CORREGIDO
-   CCS C - 20 MHz (Corregido FUSE HS)
+/* PIC16F877A - Sistema Parking 
+   Comunicación Bluetooth con ESP32
+   Control de Servos para Barreras
+   Lectura de Sensores de Estacionamiento
+   Indicadores LED por Espacio
+   Pantalla LCD I2C para Información al Usuario
+
+   CCS C Compiler
+   Hardware Connections:
+   Sensores: RA0..RA3
+   LEDs:     RB0..RB7, RD0..RD7
+   Servos:   RC0, RC1, RC2, RE0
+   UART:     RC6 (TX), RC7 (RX)
+   I2C LCD:  RC3 (SCL), RC4 (SDA)
+
 */
 
 #include <16F877A.h>
-// IMPORTANTE: Cambiado XT a HS (Obligatorio para cristales > 4MHz)
-#fuses HS, NOWDT, NOLVP, NOBROWNOUT
-#use delay(clock=20000000)
+#fuses XT, NOWDT, NOLVP, NOBROWNOUT
+#use delay(clock=4000000)
 
 /* UART Configuración */
 #use rs232(baud=9600, xmit=PIN_C6, rcv=PIN_C7, bits=8, parity=N, stop=1, ERRORS)
@@ -14,7 +26,7 @@
 #use I2C(MASTER, SDA=PIN_C4, SCL=PIN_C3, FAST)
 
 #define ADDRESS_LCD 0x4E
-#include <LCD_I2C.c> // Asegúrate de que esta librería use las funciones I2C de CCS
+#include <LCD_I2C.c> // Librería para LCD I2C
 
 /* Constantes y Variables */
 const int8 NUM_SPACES = 4;
@@ -88,8 +100,8 @@ void update_servos() {
 }
 
 char read_sensor_debounce(int8 pin) {
-   if(input(pin)) { delay_ms(10); if(input(pin)) return 'O'; }
-   return 'L';
+   if(input(pin)) { delay_ms(10); if(input(pin)) return 'L'; }
+   return 'O';
 }
 
 void parse_rx_line(char *buffer) {
@@ -145,6 +157,7 @@ void main() {
    set_tris_b(0x00);
    set_tris_d(0x00);
    set_tris_c(0x98); // RC7(RX)=In, RC6(TX)=Out, RC3/4(I2C)
+   set_tris_e(0x00);
    
    enable_interrupts(INT_RDA);
    enable_interrupts(GLOBAL);
@@ -190,11 +203,8 @@ void main() {
       // 3. Heartbeat y LCD
       tick_counter++;
       if(tick_counter >= 50) { // Ajustado tiempo (aprox 1s)
-         // NO DESHABILITAMOS INTERRUPCIONES AQUI
-         // El buffer RDA y los 20MHz del PIC pueden manejarlo.
          update_lcd_info(); 
          
-         // Pequeño delay para estabilizar voltaje tras uso de LCD antes de transmitir
          delay_ms(10); 
          enviar_estados_sensores();
          
