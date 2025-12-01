@@ -8,10 +8,9 @@
 // ====================================================================
 
 // --- Credenciales Wi-Fi ---
-const char* ssid = "O Creator's";
-const char* password = "Pizza12345*";
-//const char* ssid = "HUAWEI-2.4G-W8yg";
-//const char* password = "PGbdC7X9";
+const char* ssid = "Tu_SSID_Aqui";
+const char* password = "Tu_Contraseña_Aqui";
+
 // --- Bluetooth Serial ---
 unsigned long last_pic_sync_time = 0;
 const long PIC_SYNC_INTERVAL = 8000; // 8 segundos

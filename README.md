@@ -25,9 +25,9 @@ Sistema IoT completo para gestionar un parqueadero con **4 plazas de estacionami
     ┌────▼────────────────────┐
     │   ESP32 (Servidor Web)  │
     │  192.168.1.X:80         │
-    │ ─ Lógica de Estados    │
-    │ ─ WebServer            │
-    │ ─ ArduinoJSON          │
+    │ ─ Lógica de Estados     │
+    │ ─ WebServer             │
+    │ ─ ArduinoJSON           │
     └────┬────────────────────┘
          │ Bluetooth Serial
     ┌────▼──────────────────┐
@@ -301,6 +301,6 @@ Para reportar bugs o sugerencias, por favor abre un issue en el repositorio.
 
 **Versión:** 1.0  
 **Última actualización:** Diciembre 2025  
-**Autores:**    
-    Diseño Electrónico: [Percy Viza](https://github.com/percyviza)      
-    Programación: [Alejandro Olguin](https://github.com/alejandroolguin-am) 
+**Autores:** 
+- Diseño Electrónico: [Percy Viza](https://github.com/percyviza)      
+- Programación: [Alejandro Olguin](https://github.com/alejandroolguin-am) 
